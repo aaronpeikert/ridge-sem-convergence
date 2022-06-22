@@ -14,9 +14,11 @@ This simulation uses an old experimental version of `StructuralEquationsModell.j
 
 # Reproduction
 
-The command (paste into terminal):
+The commands (paste into terminal):
 
 ```
+git clone https://github.com/aaronpeikert/ridge-sem-convergence.git
+cd ridge-sem-convergence
 make
 ```
 
