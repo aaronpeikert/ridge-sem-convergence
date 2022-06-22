@@ -28,6 +28,6 @@ The simulation results are saved to the file `simulation_results.csv` and can be
 
 ## Dependencies
 
-This project needs `julia` and `R` and many packages (we are lazy, we know).
+This project needs, `Git`, `Make` `Julia` and `R` and many packages (we are lazy, we know).
 Exact versions of the used julia packages are recorded in `julia/StructuralEquationModels.jl/Manifest.toml`, and the old experimental version of `StructuralEquationsModell.jl` is saved as a complete source.
 For R we dumped the `sessionInfo()` in the file `RsessionInfo.txt`.
