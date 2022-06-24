@@ -3,3 +3,4 @@ cov_files/
 par_files/
 data_grid.csv
 simulation_results.csv
+.Rproj.user
