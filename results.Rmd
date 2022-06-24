@@ -1,0 +1,127 @@
+---
+title: "Notes on Simulation"
+author: "Aaron Peikert"
+date: "3/3/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+if(!requireNamespace("pacman"))install.packages("pacman")
+pacman::p_load("here", "tidyverse")
+```
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+results <- read_csv(here("simulation_new_interface_results.csv"))
+results
+```
+
+# Convergence
+
+We had three criteria for convergence:
+
+- All Optim.jl convergence flags are true (see [optims documentation](https://julianlsolvers.github.io/Optim.jl/v0.9.3/user/minimization/#notes-on-convergence-flags-and-checks) for details)
+- all parameters are -5 > x > 5
+- the implied covariance is positive semi definitive
+
+All in all, only `r sum(results$converged < 1)` models did not converge.
+
+```{r}
+results %>% 
+  filter(converged == min(converged))
+```
+
+# Maximum Liklihood
+
+We ran `lavaan` on the "true" covariance matrices with ML.
+These estimates are what we consider the true "parameters".
+We compared these estimates with the results of `StructuralEquationModells.jl` (our package).
+The MSE between the two estimates was on average `1e-6`, which we find acceptable.
+One notable difference is the starting values.
+`lavaan` uses fabin3, which we usually also use, but they failed for many models, so we switched to "simple" starting values.
+Simple starting values are independent of the observed covariance matrix and simply assume fixed values for regression, covariance, etc.
+Simple start values have considerable worse convergence properties.
+But this just increases the runtime of the simulation and did obviously had no effect on convergence rate.
+
+```{r}
+results %>%
+  filter(optimal == "smallest_alpha") %>% 
+  group_by(n_sample, n_pred, coll, n_noise) %>% 
+  summarise(rmse = mean(rmse_true), .groups = "drop") %>% 
+  ggplot(aes(n_sample, rmse, group = coll, color = coll)) +
+  geom_line() +
+  scale_color_viridis_c(option = "plasma") +
+  theme_minimal() +
+  facet_grid(vars(n_noise)) +
+  NULL
+```
+
+# ML vs Ridge with α chosen on holdout
+
+```{r}
+results %>%
+  filter(optimal %in% c("best_holdout", "smallest_alpha")) %>% 
+  group_by(n_sample, n_pred, coll, n_noise, optimal) %>% 
+  summarise(rmse = mean(rmse_true), .groups = "drop") %>% 
+  ggplot(aes(n_sample, rmse, group = optimal, color = optimal)) +
+  geom_line() +
+  scale_color_viridis_d(option = "plasma")+
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  facet_grid(vars(n_noise), vars(coll), labeller = "label_both") +
+  NULL
+```
+
+We see clear improvement in condition coll: .9 / n_noise: 0
+I guess we would expect the same thing (or even greater) for bigger n_noise.
+But remember, this is RMSE for all parameters and greater n_noise has considerable greater number of parameters, so ratio of penalized/all parameters decreases.
+Maybe repeat simulation and also note RMSE for penalized pars?
+
+# Choosing α grid
+
+```{r}
+results %>% 
+  filter(optimal == "best_holdout") %>% 
+  ggplot(aes(alpha)) +
+  geom_bar() +
+  facet_grid(vars(n_sample), vars(coll), labeller = "label_both") +
+  theme_minimal() +
+  NULL
+```
+
+
+It is pretty obvious that the grid for α should be extended to include bigger α.
+Maybe regsem has another definition of α/ridge?
+We use:
+
+$$
+F_{ridge} = F_{ML} + \alpha{}\sum^p_{j=1}\beta{}^2_j
+$$
+
+Which is the standard ridge (outside of sem) and which they reproduce on [page 1](https://arxiv.org/pdf/1703.08489.pdf).
+However, later on page 3 they note the lasso as norm.
+
+$$
+F_{lasso} = F_{ML} + \alpha ∗ \| \beta\|_1
+$$
+
+If that implies:
+
+$$
+F_{ridge} = F_{ML} + \alpha ∗ \| \beta\|_2
+$$
+
+Instead of classic rigdge:
+
+$$
+F_{ridge} = F_{ML} + \alpha ∗ \| \beta\|_2^2
+$$
+
+Than this may imply they calc ridge as:
+
+$$
+F_{ridge} = F_{ML} + \alpha{}\sqrt{\sum^p_{j=1}\beta{}^2_j}
+$$
+
+So their alpha penalty is stronger if $\sum^p_{j=1}\beta{}^2$ < 1 and weaker otherwise.
+One downside is that $\| \beta\|_2$ is harder to differentiate than $\| \beta\|_2^2$ and even impossible for $\beta{} = 0$.
